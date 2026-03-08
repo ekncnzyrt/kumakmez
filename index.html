@@ -6,6 +6,25 @@
 <title>KÜ MakMez — Kırıkkale Üniversitesi Makine Mühendisleri</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
+  .empty-state {
+    background: white;
+    border: 1px dashed var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+  }
+  .empty-state h3 {
+    font-family: var(--heading);
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+  .empty-state p {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 0;
+  }
   :root {
     --bg: #eef4fc;
     --surface: #ffffff;
@@ -876,97 +895,23 @@ window.addEventListener('load', async () => {
     <button class="pill">Haber</button>
     <button class="pill">Başarı</button>
     <button class="pill">Etkinlik</button>
-    <button class="btn btn-primary" style="margin-left:auto;">+ Haber Ekle</button>
+    <button class="btn btn-primary" style="margin-left:auto;" onclick="showPage('admin'); adminTab('haberler')">+ Haber Ekle</button>
   </div>
   <div class="news-grid">
-    <div class="news-main">
-      <div class="news-featured">
-        <div class="news-featured-img">🏆</div>
-        <div class="news-featured-body">
-          <span class="news-cat cat-basari">Başarı</span>
-          <div class="news-title">KÜ Makine Mezunu Ahmet Kaya, Tesla'da Kıdemli Mühendis Oldu</div>
-          <div class="news-excerpt">2018 yılında bölümümüzden mezun olan Ahmet Kaya, başarılı kariyerinin ardından dünyanın önde gelen elektrikli araç şirketi Tesla'da kıdemli mühendis pozisyonuna yükseldi. Kaya, Türk mühendislere ilham olmaya devam ediyor.</div>
-          <div class="news-footer"><span class="news-date">📅 6 Mart 2025</span><button class="btn btn-ghost" style="font-size:11px;padding:5px 12px;">Devamını Oku</button></div>
-        </div>
-      </div>
-
-      <div class="news-item">
-        <div class="news-item-icon" style="background:rgba(192,57,43,0.08);">📢</div>
-        <div>
-          <div class="news-item-title">Bahar Dönemi Mezuniyet Töreni — 15 Haziran 2025</div>
-          <div class="news-item-meta"><span class="news-cat cat-duyuru" style="font-size:10px;padding:2px 7px;">Duyuru</span> · 4 gün önce · 234 okunma</div>
-        </div>
-      </div>
-
-      <div class="news-item">
-        <div class="news-item-icon" style="background:rgba(36,113,163,0.08);">🤝</div>
-        <div>
-          <div class="news-item-title">Ford Otosan ile Yeni Staj Protokolü İmzalandı — 20 Kontenjan</div>
-          <div class="news-item-meta"><span class="news-cat cat-haber" style="font-size:10px;padding:2px 7px;">Haber</span> · 1 hafta önce · 891 okunma</div>
-        </div>
-      </div>
-
-      <div class="news-item">
-        <div class="news-item-icon" style="background:rgba(30,132,73,0.08);">🥇</div>
-        <div>
-          <div class="news-item-title">Öğrencilerimiz TÜBİTAK Yarışmasında 2. Oldu</div>
-          <div class="news-item-meta"><span class="news-cat cat-basari" style="font-size:10px;padding:2px 7px;">Başarı</span> · 2 hafta önce · 1.2K okunma</div>
-        </div>
-      </div>
-
-      <div class="news-item">
-        <div class="news-item-icon" style="background:rgba(192,57,43,0.08);">🔬</div>
-        <div>
-          <div class="news-item-title">Yeni Ar-Ge Laboratuvarı Açıldı — 3D Yazıcı ve CNC Ekipmanları</div>
-          <div class="news-item-meta"><span class="news-cat cat-haber" style="font-size:10px;padding:2px 7px;">Haber</span> · 3 hafta önce · 678 okunma</div>
-        </div>
-      </div>
-
-      <div class="news-item">
-        <div class="news-item-icon" style="background:rgba(36,113,163,0.08);">✈️</div>
-        <div>
-          <div class="news-item-title">Mezunumuz Mert Yılmaz Airbus'ta Mühendis Olarak İşe Başladı</div>
-          <div class="news-item-meta"><span class="news-cat cat-basari" style="font-size:10px;padding:2px 7px;">Başarı</span> · 1 ay önce · 2.1K okunma</div>
-        </div>
+    <div class="news-main" id="news-main-list">
+      <div class="empty-state">
+        <h3>Henüz haber eklenmemiş</h3>
+        <p>Bu alandaki örnek haberler kaldırıldı. Yeni haberleri yönetmek için admin panelindeki "Haberler" sekmesini kullanabilirsiniz.</p>
       </div>
     </div>
 
     <div class="news-aside">
       <div class="aside-card">
-        <div class="aside-title">📌 Önemli Duyurular</div>
-        <div class="aside-item"><div class="aside-dot"></div><div><div class="aside-item-title">Burs başvuruları 31 Mart'a kadar</div><div class="aside-item-date">3 gün önce</div></div></div>
-        <div class="aside-item"><div class="aside-dot"></div><div><div class="aside-item-title">Yaz stajı başvuruları açıldı</div><div class="aside-item-date">5 gün önce</div></div></div>
-        <div class="aside-item"><div class="aside-dot"></div><div><div class="aside-item-title">Mezun kimlik kartı yenileme</div><div class="aside-item-date">1 hafta önce</div></div></div>
-        <div class="aside-item"><div class="aside-dot"></div><div><div class="aside-item-title">Lisansüstü başvuru tarihleri</div><div class="aside-item-date">2 hafta önce</div></div></div>
-      </div>
-
-      <div class="aside-card">
-        <div class="aside-title">📊 Bu Ay</div>
-        <div style="display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:12px;color:var(--muted);">Yeni Haberler</span>
-            <span style="font-family:var(--heading);font-size:16px;font-weight:700;color:var(--text);">14</span>
+        <div class="aside-title">Önemli Duyurular</div>
+        <div id="duyuru-listesi">
+          <div class="empty-state" style="padding:16px;">
+            <p>Henüz duyuru eklenmemiş. Admin panelinden eklenen duyurular burada listelenecek.</p>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:12px;color:var(--muted);">Mezun Başarısı</span>
-            <span style="font-family:var(--heading);font-size:16px;font-weight:700;color:var(--green);">3</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:12px;color:var(--muted);">Yeni Protokol</span>
-            <span style="font-family:var(--heading);font-size:16px;font-weight:700;color:var(--blue);">2</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="aside-card">
-        <div class="aside-title">🏷 Popüler Etiketler</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          <button class="pill" style="font-size:11px;">staj</button>
-          <button class="pill" style="font-size:11px;">kariyer</button>
-          <button class="pill" style="font-size:11px;">yurtdışı</button>
-          <button class="pill" style="font-size:11px;">tübitak</button>
-          <button class="pill" style="font-size:11px;">mezuniyet</button>
-          <button class="pill" style="font-size:11px;">savunma</button>
         </div>
       </div>
     </div>
@@ -1010,15 +955,13 @@ window.addEventListener('load', async () => {
     <button class="pill">Kalite</button>
     <button class="pill">Savunma</button>
     <button class="pill">Yurt Dışı</button>
-    <button class="btn btn-primary" style="margin-left:auto;">+ İlan Ver</button>
+    <button class="btn btn-primary" style="margin-left:auto;" onclick="showPage('admin'); adminTab('ilanlar')">+ İlan Ver</button>
   </div>
-  <div class="jobs-grid">
-    <div class="job-card-full"><div class="jcf-header"><div><div class="jcf-title">Üretim Mühendisi</div><div class="jcf-company">Ford Otosan</div></div><div class="jcf-logo" style="background:rgba(36,113,163,0.1);">🏭</div></div><div style="color:var(--muted);font-size:13px;line-height:1.6;">📍 İstanbul · Tam zamanlı<br>💰 35.000–50.000 ₺/ay</div><div class="jcf-tags"><span class="jcf-tag">SolidWorks</span><span class="jcf-tag">Üretim</span><span class="jcf-tag">Lean</span><span class="job-badge badge-new">Yeni</span></div></div>
-    <div class="job-card-full"><div class="jcf-header"><div><div class="jcf-title">Ar-Ge Mühendisi</div><div class="jcf-company">Vestel</div></div><div class="jcf-logo" style="background:rgba(30,132,73,0.1);">⚡</div></div><div style="color:var(--muted);font-size:13px;line-height:1.6;">📍 Manisa · Tam zamanlı<br>💰 40.000–60.000 ₺/ay</div><div class="jcf-tags"><span class="jcf-tag">ANSYS</span><span class="jcf-tag">Ar-Ge</span><span class="jcf-tag">Termodinamik</span><span class="job-badge badge-hot">🔥 Popüler</span></div></div>
-    <div class="job-card-full"><div class="jcf-header"><div><div class="jcf-title">Savunma Sistemi Müh.</div><div class="jcf-company">Roketsan</div></div><div class="jcf-logo" style="background:var(--accentlight);">🚀</div></div><div style="color:var(--muted);font-size:13px;line-height:1.6;">📍 Ankara · Tam zamanlı<br>💰 Belirtilmedi</div><div class="jcf-tags"><span class="jcf-tag">CAD</span><span class="jcf-tag">Savunma</span><span class="jcf-tag">Dinamik Analiz</span><span class="job-badge badge-new">Yeni</span></div></div>
-    <div class="job-card-full"><div class="jcf-header"><div><div class="jcf-title">Mechanical Engineer</div><div class="jcf-company">Airbus · Hamburg</div></div><div class="jcf-logo" style="background:rgba(130,90,200,0.1);">✈️</div></div><div style="color:var(--muted);font-size:13px;line-height:1.6;">📍 Hamburg, Almanya<br>💰 ~€55.000/yıl</div><div class="jcf-tags"><span class="jcf-tag">CATIA</span><span class="jcf-tag">Havacılık</span><span class="job-badge" style="background:rgba(130,90,200,0.1);color:#855aab;font-size:10px;">Yurt Dışı</span></div></div>
-    <div class="job-card-full"><div class="jcf-header"><div><div class="jcf-title">Kalite Güvence Müh.</div><div class="jcf-company">TOFAŞ Fiat</div></div><div class="jcf-logo" style="background:var(--accentlight);">🚗</div></div><div style="color:var(--muted);font-size:13px;line-height:1.6;">📍 Bursa · Tam zamanlı<br>💰 32.000–45.000 ₺/ay</div><div class="jcf-tags"><span class="jcf-tag">ISO 9001</span><span class="jcf-tag">Kalite</span><span class="jcf-tag">Otomotiv</span></div></div>
-    <div class="job-card-full"><div class="jcf-header"><div><div class="jcf-title">Proje Müh. (Enerji)</div><div class="jcf-company">Enerjisa</div></div><div class="jcf-logo" style="background:rgba(30,132,73,0.1);">🌿</div></div><div style="color:var(--muted);font-size:13px;line-height:1.6;">📍 İstanbul · Hibrit<br>💰 38.000–55.000 ₺/ay</div><div class="jcf-tags"><span class="jcf-tag">Enerji</span><span class="jcf-tag">Proje Yönetimi</span><span class="job-badge badge-new">Yeni</span></div></div>
+  <div id="jobs-container" class="jobs-grid">
+    <div class="empty-state" style="grid-column:1/-1;">
+      <h3>Henüz iş ilanı eklenmemiş</h3>
+      <p>Örnek ilanlar kaldırıldı. Yeni ilanları admin panelindeki "İş İlanları" sekmesinden ekleyebilirsiniz.</p>
+    </div>
   </div>
 </div>
 
@@ -1054,14 +997,13 @@ window.addEventListener('load', async () => {
     <button class="pill">Yüzyüze</button>
     <button class="pill">Kariyer</button>
     <button class="pill">Teknik</button>
-    <button class="btn btn-primary" style="margin-left:auto;">+ Etkinlik Ekle</button>
+    <button class="btn btn-primary" style="margin-left:auto;" onclick="showPage('admin'); adminTab('etkinlikler')">+ Etkinlik Ekle</button>
   </div>
-  <div class="events-list">
-    <div class="event-card-full"><div class="ecf-date-box"><div class="ecf-day">22</div><div class="ecf-month">Mar</div></div><div><div class="ecf-title">Kariyer Günü Webinarı</div><div class="ecf-desc">Sektördeki lider şirketlerden KÜ mezunu mühendisler kariyer yolculuklarını anlatıyor.</div></div><span class="ecf-type type-online">🌐 Online</span></div>
-    <div class="event-card-full"><div class="ecf-date-box"><div class="ecf-day">05</div><div class="ecf-month">Nis</div></div><div><div class="ecf-title">KÜ Mezun Buluşması</div><div class="ecf-desc">Yıllık bahar buluşması. Networking akşam yemeği, ödüller ve sürpriz konuşmacılar. KÜ Kampüs'te.</div></div><span class="ecf-type type-live">📍 Kırıkkale</span></div>
-    <div class="event-card-full"><div class="ecf-date-box"><div class="ecf-day">14</div><div class="ecf-month">Nis</div></div><div><div class="ecf-title">FEM Analizi Workshop</div><div class="ecf-desc">ANSYS ile pratik sonlu elemanlar analizi. Katılımcılara sertifika verilecektir.</div></div><span class="ecf-type type-hybrid">🔀 Hibrit</span></div>
-    <div class="event-card-full"><div class="ecf-date-box"><div class="ecf-day">28</div><div class="ecf-month">Nis</div></div><div><div class="ecf-title">Savunma Sanayi Paneli</div><div class="ecf-desc">TUSAŞ, Roketsan ve ASELSAN'dan KÜ mezunu mühendislerle panel tartışması.</div></div><span class="ecf-type type-online">🌐 Online</span></div>
-    <div class="event-card-full"><div class="ecf-date-box"><div class="ecf-day">10</div><div class="ecf-month">May</div></div><div><div class="ecf-title">Mentor Buluşması</div><div class="ecf-desc">Yeni KÜ mezunları deneyimli mühendislerle bir araya geliyor. 1-1 görüşme takvimi.</div></div><span class="ecf-type type-live">📍 Ankara</span></div>
+  <div id="events-container" class="events-list">
+    <div class="empty-state">
+      <h3>Henüz etkinlik eklenmemiş</h3>
+      <p>Örnek etkinlikler kaldırıldı. Yeni etkinlikleri admin panelindeki "Etkinlikler" sekmesinden ekleyebilirsiniz.</p>
+    </div>
   </div>
 </div>
 
@@ -1692,3 +1634,5 @@ window.addEventListener('load', () => {
 
 </body>
 </html>
+
+
