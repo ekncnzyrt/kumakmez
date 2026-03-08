@@ -76,9 +76,159 @@
     font-size: 12px;
     margin-bottom: 12px;
   }
+  .poll-compose {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  .poll-compose-grid {
+    display: grid;
+    grid-template-columns: 1.2fr 220px;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .poll-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .poll-option-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .poll-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+    margin-bottom: 14px;
+  }
+  .poll-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .poll-title {
+    font-family: var(--heading);
+    font-size: 19px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .poll-description {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.7;
+    margin-bottom: 14px;
+  }
+  .poll-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .poll-badge-active {
+    background: rgba(30,132,73,0.12);
+    color: var(--green);
+  }
+  .poll-badge-closed {
+    background: rgba(26,95,170,0.12);
+    color: var(--accent);
+  }
+  .poll-meta {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+  .poll-options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .poll-option-btn {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: white;
+    padding: 12px 14px;
+    font-family: var(--body);
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .poll-option-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    background: var(--accentlight);
+  }
+  .poll-option-btn:disabled {
+    cursor: default;
+  }
+  .poll-option-btn.selected {
+    border-color: var(--accent);
+    background: var(--accentlight);
+  }
+  .poll-option-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+  .poll-option-label {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .poll-option-stats {
+    color: var(--muted);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .poll-progress {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: #e7eff9;
+    overflow: hidden;
+  }
+  .poll-progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #1a5faa, #3f8de0);
+  }
+  .poll-schema-warning {
+    background: #fff9e8;
+    border: 1px solid #f0d98b;
+    color: #8a6700;
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
   @media (max-width: 720px) {
     .forum-compose-grid {
       grid-template-columns: 1fr;
+    }
+    .poll-compose-grid, .poll-option-row {
+      grid-template-columns: 1fr;
+    }
+    .poll-header {
+      flex-direction: column;
+      align-items: stretch;
     }
   }
   :root {
@@ -1102,6 +1252,7 @@ window.addEventListener('load', async () => {
     }
     if (page === 'news') loadNewsPage();
     if (page === 'forum') loadForumPage();
+    if (page === 'polls') loadPollsPage();
     if (page === 'jobs') loadJobsPage();
     if (page === 'events') loadEventsPage();
     if (page === 'admin') { adminTab('haberler'); }
@@ -1117,6 +1268,116 @@ window.addEventListener('load', async () => {
       const input = document.getElementById('forum-baslik');
       if (input) input.focus();
     }
+  }
+
+  let currentPollFilter = 'aktif';
+  let pollSchemaReady = true;
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function pollOptionFieldHtml(index, value = '') {
+    return `
+      <div class="poll-option-row">
+        <input class="forum-input poll-option-input" type="text" placeholder="Seçenek ${index + 1}" value="${escapeHtml(value)}">
+        <button class="btn btn-ghost" type="button" onclick="removePollOptionField(this)" style="padding:10px 14px;">Sil</button>
+      </div>
+    `;
+  }
+
+  function resetPollComposer() {
+    const list = document.getElementById('poll-options-list');
+    if (!list) return;
+    list.innerHTML = pollOptionFieldHtml(0) + pollOptionFieldHtml(1);
+    const title = document.getElementById('poll-title');
+    const description = document.getElementById('poll-description');
+    const endDate = document.getElementById('poll-end-date');
+    const msg = document.getElementById('poll-msg');
+    if (title) title.value = '';
+    if (description) description.value = '';
+    if (endDate) endDate.value = '';
+    if (msg) msg.style.display = 'none';
+  }
+
+  function togglePollComposer(forceOpen) {
+    if (!pollSchemaReady) {
+      showPollSchemaWarning();
+      return;
+    }
+    const box = document.getElementById('poll-composer');
+    if (!box) return;
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : box.style.display === 'none';
+    box.style.display = shouldOpen ? 'block' : 'none';
+    if (shouldOpen) {
+      resetPollComposer();
+      const input = document.getElementById('poll-title');
+      if (input) input.focus();
+    }
+  }
+
+  function addPollOptionField(value = '') {
+    const list = document.getElementById('poll-options-list');
+    if (!list) return;
+    const currentCount = list.querySelectorAll('.poll-option-row').length;
+    if (currentCount >= 6) {
+      alert('En fazla 6 seçenek ekleyebilirsiniz.');
+      return;
+    }
+    list.insertAdjacentHTML('beforeend', pollOptionFieldHtml(currentCount, value));
+  }
+
+  function removePollOptionField(button) {
+    const list = document.getElementById('poll-options-list');
+    if (!list) return;
+    const rows = list.querySelectorAll('.poll-option-row');
+    if (rows.length <= 2) {
+      alert('Ankette en az 2 seçenek olmalı.');
+      return;
+    }
+    button.closest('.poll-option-row')?.remove();
+    list.querySelectorAll('.poll-option-input').forEach((input, index) => {
+      input.placeholder = `Seçenek ${index + 1}`;
+    });
+  }
+
+  function setPollFilter(filter, button) {
+    currentPollFilter = filter;
+    if (button?.parentElement) {
+      button.parentElement.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+      button.classList.add('active');
+    }
+    loadPollsPage();
+  }
+
+  function showPollSchemaWarning(errorMessage) {
+    pollSchemaReady = false;
+    const warning = document.getElementById('poll-schema-warning');
+    if (!warning) return;
+    warning.style.display = 'block';
+    warning.innerHTML = `
+      <strong>Anket altyapısı henüz kurulmamış.</strong><br>
+      Önce Supabase SQL Editor içinde <code>supabase-anketler-schema.sql</code> dosyasını çalıştırın.
+      ${errorMessage ? `<br><span style="font-size:12px;">Detay: ${escapeHtml(errorMessage)}</span>` : ''}
+    `;
+  }
+
+  function hidePollSchemaWarning() {
+    pollSchemaReady = true;
+    const warning = document.getElementById('poll-schema-warning');
+    if (warning) warning.style.display = 'none';
+  }
+
+  function pollClosed(anket) {
+    if (!anket) return false;
+    if (anket.durum === 'kapandi') return true;
+    if (!anket.bitis_tarihi) return false;
+    return new Date(anket.bitis_tarihi).getTime() <= Date.now();
   }
 
   document.querySelectorAll('.pill').forEach(pill => {
@@ -1157,27 +1418,40 @@ window.addEventListener('load', async () => {
     <div class="page-subtitle">Görüşünü paylaş, mezunların nabzını tut</div>
   </div>
   <div class="filter-row" style="margin-top:24px;">
-    <button class="pill active">Aktif</button>
-    <button class="pill">Kapandı</button>
-    <button class="btn btn-primary" style="margin-left:auto;">+ Anket Oluştur</button>
+    <button class="pill active" onclick="setPollFilter('aktif', this)">Aktif</button>
+    <button class="pill" onclick="setPollFilter('kapandi', this)">Kapandı</button>
+    <button class="btn btn-primary" style="margin-left:auto;" onclick="togglePollComposer()">+ Anket Oluştur</button>
   </div>
   <div style="max-width:720px;margin:0 auto;padding:0 32px 60px;">
-
-    <div style="text-align:center;padding:80px 32px;color:var(--muted);">
-      <div style="font-size:64px;margin-bottom:16px;">📊</div>
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;color:var(--text);margin-bottom:8px;">Henüz anket oluşturulmamış</div>
-      <div style="font-size:14px;">Yeni anket oluşturmak için butona tıklayın.</div>
+    <div id="poll-schema-warning" class="poll-schema-warning" style="display:none;"></div>
+    <div id="poll-composer" class="poll-compose" style="display:none;">
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:6px;color:var(--text);">Yeni Anket Oluştur</div>
+      <div class="forum-helper">Başlık, açıklama ve seçenekleri girerek yeni anket oluşturabilirsiniz.</div>
+      <div class="poll-compose-grid">
+        <input id="poll-title" class="forum-input" type="text" placeholder="Anket başlığı">
+        <input id="poll-end-date" class="forum-input" type="datetime-local">
+      </div>
+      <textarea id="poll-description" class="forum-textarea" placeholder="Anket açıklaması (isteğe bağlı)"></textarea>
+      <div id="poll-options-list" class="poll-options-list"></div>
+      <div style="display:flex;justify-content:flex-start;margin-bottom:14px;">
+        <button class="btn btn-ghost" type="button" onclick="addPollOptionField()">+ Seçenek Ekle</button>
+      </div>
+      <div class="forum-compose-actions">
+        <span id="poll-msg" class="forum-note" style="display:none;color:var(--green);">Anket başarıyla oluşturuldu.</span>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-ghost" type="button" onclick="togglePollComposer(false)">Vazgeç</button>
+          <button class="btn btn-primary" type="button" onclick="anketOlustur()">Anketi Yayınla</button>
+        </div>
+      </div>
     </div>
-
+    <div id="polls-container">
+      <div class="empty-state" style="text-align:center;">
+        <h3>Henüz anket oluşturulmamış</h3>
+        <p>Yeni anket oluşturmak için yukarıdaki butonu kullanabilirsiniz.</p>
+      </div>
+    </div>
   </div>
 </div>
-
-<script>
-function vote(el) {
-  el.style.opacity = '0.7';
-  el.style.cursor = 'default';
-}
-</script>
 
 
 <!-- KİLİTLİ MODAL -->
@@ -1399,6 +1673,114 @@ async function forumKonuEkle() {
   loadStats();
 }
 
+// ANKET OLUŞTUR
+async function anketOlustur() {
+  if (!pollSchemaReady) {
+    showPollSchemaWarning();
+    return;
+  }
+
+  const baslik = document.getElementById('poll-title').value.trim();
+  const aciklama = document.getElementById('poll-description').value.trim();
+  const bitisTarihi = document.getElementById('poll-end-date').value || null;
+  const msg = document.getElementById('poll-msg');
+  const secenekler = Array.from(document.querySelectorAll('.poll-option-input'))
+    .map(input => input.value.trim())
+    .filter(Boolean);
+
+  if (!baslik) return alert('Anket başlığı zorunlu!');
+  if (secenekler.length < 2) return alert('En az 2 seçenek girmelisiniz.');
+
+  const { data: sessionData } = await _supa.auth.getSession();
+  const user = sessionData?.session?.user;
+  if (!user) {
+    alert('Anket oluşturmak için giriş yapmalısınız.');
+    return;
+  }
+
+  const { data: profile } = await _supa.from('profiles').select('full_name').eq('id', user.id).single();
+  const olusturanAdi = profile?.full_name || user.email || 'İsimsiz kullanıcı';
+
+  const { data: anket, error: anketError } = await _supa
+    .from('anketler')
+    .insert({
+      baslik,
+      aciklama: aciklama || null,
+      bitis_tarihi: bitisTarihi,
+      durum: 'aktif',
+      olusturan_id: user.id,
+      olusturan_adi: olusturanAdi
+    })
+    .select('id')
+    .single();
+
+  if (anketError) {
+    if (anketError.code === 'PGRST205' || /anketler/i.test(anketError.message || '')) {
+      showPollSchemaWarning(anketError.message);
+      return;
+    }
+    alert('Anket oluşturulurken bir hata oluştu: ' + anketError.message);
+    return;
+  }
+
+  const secenekPayload = secenekler.map((metin, index) => ({
+    anket_id: anket.id,
+    metin,
+    sira: index
+  }));
+
+  const { error: secenekError } = await _supa.from('anket_secenekleri').insert(secenekPayload);
+  if (secenekError) {
+    if (secenekError.code === 'PGRST205' || /anket/i.test(secenekError.message || '')) {
+      showPollSchemaWarning(secenekError.message);
+    }
+    await _supa.from('anketler').delete().eq('id', anket.id);
+    alert('Anket seçenekleri kaydedilirken bir hata oluştu: ' + secenekError.message);
+    return;
+  }
+
+  msg.style.display = 'inline';
+  setTimeout(() => msg.style.display = 'none', 2000);
+  togglePollComposer(false);
+  loadPollsPage();
+}
+
+// ANKETE OY VER
+async function anketOyVer(anketId, secenekId) {
+  if (!pollSchemaReady) {
+    showPollSchemaWarning();
+    return;
+  }
+
+  const { data: sessionData } = await _supa.auth.getSession();
+  const user = sessionData?.session?.user;
+  if (!user) {
+    alert('Oy vermek için giriş yapmalısınız.');
+    return;
+  }
+
+  const { error } = await _supa.from('anket_oylari').insert({
+    anket_id: anketId,
+    secenek_id: secenekId,
+    user_id: user.id
+  });
+
+  if (error) {
+    if (error.code === '23505' || /duplicate|unique/i.test(error.message || '')) {
+      alert('Bu ankete zaten oy verdiniz.');
+      return;
+    }
+    if (error.code === 'PGRST205' || /anket/i.test(error.message || '')) {
+      showPollSchemaWarning(error.message);
+      return;
+    }
+    alert('Oy verilirken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  loadPollsPage();
+}
+
 // İLAN EKLE
 async function ilanEkle() {
   const baslik = document.getElementById('i-baslik').value.trim();
@@ -1553,6 +1935,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(loadHaberler, 1000);
   setTimeout(loadForumPage, 1000);
   setTimeout(loadHomeForum, 1000);
+  setTimeout(loadPollsPage, 1000);
+  resetPollComposer();
 });
 </script>
 
@@ -1704,10 +2088,116 @@ async function loadHomeForum() {
         </div>
       </div>
       <div class="post-stats">
-        <div class="post-replies">${k.yorum_sayisi ?? 0} yorum</div>
+      <div class="post-replies">${k.yorum_sayisi ?? 0} yorum</div>
       </div>
     </div>
   `).join('');
+}
+
+// ANKETLER SAYFASI
+async function loadPollsPage() {
+  const container = document.getElementById('polls-container');
+  if (!container) return;
+
+  const { data: sessionData } = await _supa.auth.getSession();
+  const userId = sessionData?.session?.user?.id || null;
+
+  const { data: anketler, error } = await _supa
+    .from('anketler')
+    .select('*, anket_secenekleri(*)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    showPollSchemaWarning(error.message);
+    container.innerHTML = `
+      <div class="empty-state" style="text-align:center;">
+        <h3>Anket sistemi hazır değil</h3>
+        <p>Önce Supabase tarafındaki anket tabloları oluşturulmalı.</p>
+      </div>
+    `;
+    return;
+  }
+
+  hidePollSchemaWarning();
+
+  let voteMap = {};
+  if (userId) {
+    const { data: oylar, error: voteError } = await _supa
+      .from('anket_oylari')
+      .select('anket_id, secenek_id')
+      .eq('user_id', userId);
+
+    if (voteError) {
+      showPollSchemaWarning(voteError.message);
+    } else {
+      voteMap = Object.fromEntries((oylar || []).map(oy => [oy.anket_id, oy.secenek_id]));
+    }
+  }
+
+  const filtreliAnketler = (anketler || []).filter(anket =>
+    currentPollFilter === 'kapandi' ? pollClosed(anket) : !pollClosed(anket)
+  );
+
+  if (filtreliAnketler.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state" style="text-align:center;">
+        <h3>${currentPollFilter === 'kapandi' ? 'Kapalı anket yok' : 'Henüz aktif anket yok'}</h3>
+        <p>${currentPollFilter === 'kapandi' ? 'Kapanmış anketler burada listelenecek.' : 'Yeni anket oluşturduğunuzda burada görünecek.'}</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtreliAnketler.map(anket => {
+    const kapali = pollClosed(anket);
+    const secenekler = [...(anket.anket_secenekleri || [])].sort((a, b) => (a.sira ?? 0) - (b.sira ?? 0));
+    const toplamOy = secenekler.reduce((sum, secenek) => sum + (secenek.oy_sayisi ?? 0), 0);
+    const seciliSecenekId = voteMap[anket.id];
+    const badgeClass = kapali ? 'poll-badge poll-badge-closed' : 'poll-badge poll-badge-active';
+    const badgeLabel = kapali ? 'Kapandı' : 'Aktif';
+    const bitisMetni = anket.bitis_tarihi ? ` · Bitiş: ${new Date(anket.bitis_tarihi).toLocaleString('tr-TR')}` : '';
+    const safeBaslik = escapeHtml(anket.baslik || 'Başlıksız anket');
+    const safeAciklama = escapeHtml(anket.aciklama || '');
+    const safeOlusturan = escapeHtml(anket.olusturan_adi || 'İsimsiz kullanıcı');
+
+    return `
+      <div class="poll-card">
+        <div class="poll-header">
+          <div>
+            <div class="poll-title">${safeBaslik}</div>
+            ${anket.aciklama ? `<div class="poll-description">${safeAciklama}</div>` : ''}
+          </div>
+          <span class="${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div class="poll-meta">Oluşturan: ${safeOlusturan} · ${timeAgo(anket.created_at)}${bitisMetni}</div>
+        <div class="poll-options">
+          ${secenekler.map(secenek => {
+            const oySayisi = secenek.oy_sayisi ?? 0;
+            const yuzde = toplamOy > 0 ? Math.round((oySayisi / toplamOy) * 100) : 0;
+            const secili = seciliSecenekId === secenek.id;
+            const disabled = kapali || !!seciliSecenekId;
+            const buttonClass = secili ? 'poll-option-btn selected' : 'poll-option-btn';
+            const click = disabled ? '' : `onclick="anketOyVer('${anket.id}', '${secenek.id}')"`;
+            const safeSecenek = escapeHtml(secenek.metin || 'Seçenek');
+            return `
+              <button class="${buttonClass}" type="button" ${click} ${disabled ? 'disabled' : ''}>
+                <div class="poll-option-top">
+                  <span class="poll-option-label">${safeSecenek}</span>
+                  <span class="poll-option-stats">${oySayisi} oy · %${yuzde}</span>
+                </div>
+                <div class="poll-progress">
+                  <div class="poll-progress-bar" style="width:${yuzde}%;"></div>
+                </div>
+              </button>
+            `;
+          }).join('')}
+        </div>
+        <div class="poll-meta" style="margin-top:12px;margin-bottom:0;">
+          Toplam oy: ${toplamOy}${seciliSecenekId ? ' · Oyunuz kaydedildi' : kapali ? ' · Bu anket oylamaya kapalı' : ' · Oy vermek için bir seçenek seçin'}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 // İŞ İLANLARI SAYFASI
