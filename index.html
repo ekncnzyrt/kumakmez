@@ -882,6 +882,22 @@ function isAdmin() {
   return currentRole() === 'admin';
 }
 
+function currentUserId() {
+  return currentSessionUser?.id || currentUserProfile?.id || null;
+}
+
+function canManageForumCommentOwner(authorId) {
+  const userId = currentUserId();
+  return !!userId && !!authorId && (isAdmin() || userId === authorId);
+}
+
+function refreshPermissionAwareViews() {
+  if (typeof loadForumPage === 'function') loadForumPage();
+  if (typeof loadHomeForum === 'function') loadHomeForum();
+  if (typeof loadPollsPage === 'function') loadPollsPage();
+  if (isAdmin() && typeof loadForumYonetim === 'function') loadForumYonetim();
+}
+
 function canAccessPage(page) {
   if (page === 'admin') return isAdmin();
   if (page === 'jobs') return currentRole() !== 'ogrenci';
@@ -990,6 +1006,10 @@ function setCurrentUserContext(user, profile) {
 
   if (currentSessionUser && currentUserProfile) {
     renderCurrentUser();
+  }
+
+  if (document.readyState !== 'loading') {
+    setTimeout(refreshPermissionAwareViews, 0);
   }
 }
 
@@ -1951,8 +1971,86 @@ async function forumKonuSil(konuId) {
   if (isAdmin()) loadForumYonetim();
 }
 
-async function forumYorumSil(yorumId) {
-  if (!ensureAdminAccess('Forum yorumunu silmek')) return;
+async function forumYorumDuzenle(yorumId, yazarId) {
+  let izinVar = canManageForumCommentOwner(yazarId);
+  const { data: yorum, error } = await _supa
+    .from('forum_yorumlar')
+    .select('id, icerik, yazar_id')
+    .eq('id', yorumId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST205' || /forum_yorumlar/i.test(error.message || '')) {
+      showForumCommentSchemaWarning(error.message);
+      return;
+    }
+    alert('Yorum bilgisi alınırken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  izinVar = izinVar || canManageForumCommentOwner(yorum?.yazar_id);
+  if (!izinVar) {
+    alert('Bu yorumu sadece yazan kişi veya admin düzenleyebilir.');
+    return;
+  }
+
+  const mevcutIcerik = yorum?.icerik || '';
+  const yeniIcerik = prompt('Yorumu düzenleyin:', mevcutIcerik);
+  if (yeniIcerik === null) return;
+
+  const duzenlenmisIcerik = yeniIcerik.trim();
+  if (!duzenlenmisIcerik) {
+    alert('Yorum içeriği boş olamaz.');
+    return;
+  }
+
+  if (duzenlenmisIcerik === mevcutIcerik.trim()) return;
+
+  const { error: updateError } = await _supa
+    .from('forum_yorumlar')
+    .update({ icerik: duzenlenmisIcerik })
+    .eq('id', yorumId);
+
+  if (updateError) {
+    if (updateError.code === 'PGRST205' || /forum_yorumlar/i.test(updateError.message || '')) {
+      showForumCommentSchemaWarning(updateError.message);
+      return;
+    }
+    alert('Yorum düzenlenirken bir hata oluştu: ' + updateError.message);
+    return;
+  }
+
+  loadForumPage();
+  loadHomeForum();
+  if (isAdmin()) loadForumYonetim();
+}
+
+async function forumYorumSil(yorumId, yazarId) {
+  let izinVar = canManageForumCommentOwner(yazarId);
+  if (!izinVar) {
+    const { data: yorum, error: yorumError } = await _supa
+      .from('forum_yorumlar')
+      .select('yazar_id')
+      .eq('id', yorumId)
+      .single();
+
+    if (yorumError) {
+      if (yorumError.code === 'PGRST205' || /forum_yorumlar/i.test(yorumError.message || '')) {
+        showForumCommentSchemaWarning(yorumError.message);
+        return;
+      }
+      alert('Yorum bilgisi alınırken bir hata oluştu: ' + yorumError.message);
+      return;
+    }
+
+    izinVar = canManageForumCommentOwner(yorum?.yazar_id);
+  }
+
+  if (!izinVar) {
+    alert('Bu yorumu sadece yazan kişi veya admin silebilir.');
+    return;
+  }
+
   if (!confirm('Bu yorumu silmek istediğinize emin misiniz?')) return;
 
   const { error } = await _supa.from('forum_yorumlar').delete().eq('id', yorumId);
@@ -2231,7 +2329,10 @@ async function loadForumYonetim() {
           ${formatMultilineText(yorum.icerik || '')}
         </div>
       </div>
-      <button onclick="forumYorumSil('${yorum.id}')" style="background:rgba(220,50,50,0.1);color:#c0392b;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Yorumu Sil</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="forumYorumDuzenle('${yorum.id}','${yorum.yazar_id || ''}')" style="background:rgba(26,95,170,0.1);color:var(--accent);border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Düzenle</button>
+        <button onclick="forumYorumSil('${yorum.id}','${yorum.yazar_id || ''}')" style="background:rgba(220,50,50,0.1);color:#c0392b;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Yorumu Sil</button>
+      </div>
     </div>
   `).join('');
 }
@@ -2542,7 +2643,10 @@ async function loadForumPage() {
                 <span class="forum-comment-author">${escapeHtml(yorum.yazar_adi || 'İsimsiz kullanıcı')}</span>
                 <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                   <span>${timeAgo(yorum.created_at)}</span>
-                  ${isAdmin() ? `<button class="btn btn-ghost" type="button" style="padding:6px 10px;font-size:11px;" onclick="forumYorumSil('${yorum.id}')">Yorumu Sil</button>` : ''}
+                  ${canManageForumCommentOwner(yorum.yazar_id) ? `
+                    <button class="btn btn-ghost" type="button" style="padding:6px 10px;font-size:11px;" onclick="forumYorumDuzenle('${yorum.id}','${yorum.yazar_id || ''}')">Düzenle</button>
+                    <button class="btn btn-ghost" type="button" style="padding:6px 10px;font-size:11px;" onclick="forumYorumSil('${yorum.id}','${yorum.yazar_id || ''}')">Sil</button>
+                  ` : ''}
                 </span>
               </div>
               <div class="forum-comment-body">${formatMultilineText(yorum.icerik || '')}</div>
