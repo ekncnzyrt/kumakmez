@@ -25,6 +25,62 @@
     line-height: 1.7;
     margin-bottom: 0;
   }
+  .forum-compose {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    margin-bottom: 18px;
+  }
+  .forum-compose-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 220px;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .forum-input, .forum-textarea, .forum-select {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-family: var(--body);
+    font-size: 13px;
+    outline: none;
+    background: white;
+    color: var(--text);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .forum-input:focus, .forum-textarea:focus, .forum-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(26,95,170,0.08);
+  }
+  .forum-textarea {
+    min-height: 110px;
+    resize: vertical;
+    margin-bottom: 12px;
+  }
+  .forum-compose-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .forum-note {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .forum-helper {
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 720px) {
+    .forum-compose-grid {
+      grid-template-columns: 1fr;
+    }
+  }
   :root {
     --bg: #eef4fc;
     --surface: #ffffff;
@@ -931,9 +987,31 @@ window.addEventListener('load', async () => {
     <button class="pill">Teknik</button>
     <button class="pill">Staj</button>
     <button class="pill">Yüksek Lisans</button>
-    <button class="btn btn-primary" style="margin-left:auto;">+ Yeni Konu</button>
+    <button class="btn btn-primary" style="margin-left:auto;" onclick="toggleForumComposer()">+ Yeni Konu</button>
   </div>
   <div style="max-width:1200px;margin:0 auto;padding:0 32px 60px;">
+    <div id="forum-composer" class="forum-compose" style="display:none;">
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:700;margin-bottom:6px;color:var(--text);">Yeni Konu Aç</div>
+      <div class="forum-helper">Başlık, kategori ve açıklama girerek yeni forum konusu oluşturabilirsiniz.</div>
+      <div class="forum-compose-grid">
+        <input id="forum-baslik" class="forum-input" type="text" placeholder="Konu başlığı">
+        <select id="forum-kategori" class="forum-select">
+          <option value="genel">Genel</option>
+          <option value="kariyer">Kariyer</option>
+          <option value="teknik">Teknik</option>
+          <option value="staj">Staj</option>
+          <option value="yuksek-lisans">Yüksek Lisans</option>
+        </select>
+      </div>
+      <textarea id="forum-icerik" class="forum-textarea" placeholder="Konunuzu detaylı şekilde yazın..."></textarea>
+      <div class="forum-compose-actions">
+        <span id="forum-msg" class="forum-note" style="display:none;color:var(--green);">Konu başarıyla yayınlandı.</span>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-ghost" onclick="toggleForumComposer(false)">Vazgeç</button>
+          <button class="btn btn-primary" onclick="forumKonuEkle()">Konuyu Yayınla</button>
+        </div>
+      </div>
+    </div>
     <div class="divider-label">Son Konular</div>
     <div id="forum-posts-list">
       <div style="text-align:center;padding:40px;color:var(--muted);">Henüz konu açılmamış. İlk konuyu sen aç! 🚀</div>
@@ -1018,11 +1096,27 @@ window.addEventListener('load', async () => {
     if (links[idx]) links[idx].classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     // Sayfa açılınca DB'den yükle
+    if (page === 'home') {
+      loadSidebar();
+      loadStats();
+    }
     if (page === 'news') loadNewsPage();
+    if (page === 'forum') loadForumPage();
     if (page === 'jobs') loadJobsPage();
     if (page === 'events') loadEventsPage();
     if (page === 'admin') { adminTab('haberler'); }
     if (page === 'members') loadMembers();
+  }
+
+  function toggleForumComposer(forceOpen) {
+    const box = document.getElementById('forum-composer');
+    if (!box) return;
+    const shouldOpen = typeof forceOpen === 'boolean' ? forceOpen : box.style.display === 'none';
+    box.style.display = shouldOpen ? 'block' : 'none';
+    if (shouldOpen) {
+      const input = document.getElementById('forum-baslik');
+      if (input) input.focus();
+    }
   }
 
   document.querySelectorAll('.pill').forEach(pill => {
@@ -1255,7 +1349,54 @@ async function haberEkle() {
     msg.style.display = 'inline';
     setTimeout(() => msg.style.display = 'none', 2000);
     loadHaberler();
+    loadNewsPage();
+    loadSidebar();
   }
+}
+
+// FORUM KONU EKLE
+async function forumKonuEkle() {
+  const baslik = document.getElementById('forum-baslik').value.trim();
+  const icerik = document.getElementById('forum-icerik').value.trim();
+  const kategori = document.getElementById('forum-kategori').value;
+  const msg = document.getElementById('forum-msg');
+  if (!baslik || !icerik) return alert('Başlık ve içerik zorunlu!');
+
+  const { data: sessionData } = await _supa.auth.getSession();
+  const user = sessionData?.session?.user;
+  if (!user) {
+    alert('Konu açmak için giriş yapmalısınız.');
+    return;
+  }
+
+  const { data: profile } = await _supa.from('profiles').select('full_name').eq('id', user.id).single();
+  const yazarAdi = profile?.full_name || user.email || 'İsimsiz kullanıcı';
+
+  const payload = {
+    baslik,
+    icerik,
+    kategori,
+    yazar_id: user.id,
+    yazar_adi: yazarAdi,
+    oy_sayisi: 0,
+    yorum_sayisi: 0
+  };
+
+  const { error } = await _supa.from('forum_konular').insert(payload);
+  if (error) {
+    alert('Konu eklenirken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  document.getElementById('forum-baslik').value = '';
+  document.getElementById('forum-icerik').value = '';
+  document.getElementById('forum-kategori').value = 'genel';
+  msg.style.display = 'inline';
+  setTimeout(() => msg.style.display = 'none', 2000);
+  toggleForumComposer(false);
+  loadForumPage();
+  loadHomeForum();
+  loadStats();
 }
 
 // İLAN EKLE
@@ -1273,6 +1414,9 @@ async function ilanEkle() {
     msg.style.display = 'inline';
     setTimeout(() => msg.style.display = 'none', 2000);
     loadIlanlar();
+    loadJobsPage();
+    loadSidebar();
+    loadStats();
   }
 }
 
@@ -1291,6 +1435,9 @@ async function etkinlikEkle() {
     msg.style.display = 'inline';
     setTimeout(() => msg.style.display = 'none', 2000);
     loadEtkinlikler();
+    loadEventsPage();
+    loadSidebar();
+    loadStats();
   }
 }
 
@@ -1380,11 +1527,32 @@ async function sil(tablo, id, reload) {
   if (!confirm('Silmek istediğinize emin misiniz?')) return;
   await _supa.from(tablo).delete().eq('id', id);
   reload();
+  if (tablo === 'haberler') {
+    loadNewsPage();
+    loadSidebar();
+  }
+  if (tablo === 'is_ilanlari') {
+    loadJobsPage();
+    loadSidebar();
+    loadStats();
+  }
+  if (tablo === 'etkinlikler') {
+    loadEventsPage();
+    loadSidebar();
+    loadStats();
+  }
+  if (tablo === 'forum_konular') {
+    loadForumPage();
+    loadHomeForum();
+    loadStats();
+  }
 }
 
 // Sayfa açılınca haberleri yükle
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(loadHaberler, 1000);
+  setTimeout(loadForumPage, 1000);
+  setTimeout(loadHomeForum, 1000);
 });
 </script>
 
@@ -1457,6 +1625,89 @@ async function loadNewsPage() {
           <div class="aside-dot"></div>
           <div><div class="aside-item-title">${d.baslik}</div><div class="aside-item-date">${timeAgo(d.created_at)}</div></div>
         </div>`).join('');
+}
+
+function forumTagClass(kategori) {
+  const map = {
+    kariyer: 'tag-kariyer',
+    teknik: 'tag-teknik',
+    staj: 'tag-staj',
+    'yuksek-lisans': 'tag-genel',
+    genel: 'tag-genel'
+  };
+  return map[kategori] || 'tag-genel';
+}
+
+function forumKategoriLabel(kategori) {
+  const map = {
+    kariyer: 'Kariyer',
+    teknik: 'Teknik',
+    staj: 'Staj',
+    'yuksek-lisans': 'Yüksek Lisans',
+    genel: 'Genel'
+  };
+  return map[kategori] || 'Genel';
+}
+
+// FORUM SAYFASI
+async function loadForumPage() {
+  const { data } = await _supa.from('forum_konular').select('*').order('created_at', { ascending: false });
+  const el = document.getElementById('forum-posts-list');
+  if (!el) return;
+  if (!data || data.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Henüz konu açılmamış. İlk konuyu sen aç! 🚀</div>';
+    return;
+  }
+
+  el.innerHTML = data.map(k => `
+    <div class="post-card">
+      <div class="vote-col">
+        <button class="vote-btn" type="button">▲</button>
+        <div class="vote-count">${k.oy_sayisi ?? 0}</div>
+        <button class="vote-btn" type="button">▼</button>
+      </div>
+      <div>
+        <div class="post-title">${k.baslik || 'Başlıksız konu'}</div>
+        <div class="post-meta">
+          <span class="post-tag ${forumTagClass(k.kategori)}">${forumKategoriLabel(k.kategori)}</span>
+          <span class="post-author">${k.yazar_adi || 'İsimsiz kullanıcı'} · ${timeAgo(k.created_at)}</span>
+        </div>
+        ${k.icerik ? `<div style="margin-top:10px;color:var(--muted);font-size:13px;line-height:1.7;">${k.icerik}</div>` : ''}
+      </div>
+      <div class="post-stats">
+        <div class="post-replies">${k.yorum_sayisi ?? 0} yorum</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ANA SAYFA FORUM ÖNİZLEME
+async function loadHomeForum() {
+  const { data } = await _supa.from('forum_konular').select('*').order('created_at', { ascending: false }).limit(4);
+  const el = document.getElementById('home-forum-list');
+  if (!el) return;
+  if (!data || data.length === 0) {
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:var(--muted);font-size:13px;">Henüz konu açılmamış. İlk konuyu sen aç! 🚀</div>';
+    return;
+  }
+
+  el.innerHTML = data.map(k => `
+    <div class="post-card" onclick="showPage('forum')">
+      <div class="vote-col">
+        <div class="vote-count">${k.oy_sayisi ?? 0}</div>
+      </div>
+      <div>
+        <div class="post-title">${k.baslik || 'Başlıksız konu'}</div>
+        <div class="post-meta">
+          <span class="post-tag ${forumTagClass(k.kategori)}">${forumKategoriLabel(k.kategori)}</span>
+          <span class="post-author">${k.yazar_adi || 'İsimsiz kullanıcı'} · ${timeAgo(k.created_at)}</span>
+        </div>
+      </div>
+      <div class="post-stats">
+        <div class="post-replies">${k.yorum_sayisi ?? 0} yorum</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 // İŞ İLANLARI SAYFASI
@@ -1623,6 +1874,8 @@ async function loadSidebar() {
             <div style="color:var(--muted);font-size:11px;margin-top:6px;">${timeAgo(h.created_at)}</div>
           </div>`).join('');
   }
+
+  loadHomeForum();
 }
 
 // Sayfa yüklenince sidebar'ı doldur
