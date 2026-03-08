@@ -1660,7 +1660,7 @@ window.addEventListener('load', async () => {
 <div id="page-admin" class="page">
   <div class="page-hero" style="background:linear-gradient(135deg,#0d1f3c,#1a3a6b);color:white;">
     <div class="page-title" style="color:white;">⚙️ Admin Paneli</div>
-    <div class="page-subtitle" style="color:rgba(255,255,255,0.6);">Haber, ilan ve etkinlikleri buradan yönet</div>
+    <div class="page-subtitle" style="color:rgba(255,255,255,0.6);">Haber, forum, ilan, etkinlik ve kullanıcıları buradan yönet</div>
   </div>
 
   <div style="max-width:1000px;margin:32px auto;padding:0 32px 60px;">
@@ -1668,6 +1668,7 @@ window.addEventListener('load', async () => {
     <!-- SEKMELER -->
     <div style="display:flex;gap:8px;margin-bottom:28px;">
       <button onclick="adminTab('haberler')" id="atab-haberler" class="btn btn-primary" style="font-size:13px;">📰 Haberler</button>
+      <button onclick="adminTab('forum')" id="atab-forum" class="btn btn-ghost" style="font-size:13px;">💬 Forum</button>
       <button onclick="adminTab('ilanlar')" id="atab-ilanlar" class="btn btn-ghost" style="font-size:13px;">💼 İş İlanları</button>
       <button onclick="adminTab('etkinlikler')" id="atab-etkinlikler" class="btn btn-ghost" style="font-size:13px;">📅 Etkinlikler</button>
       <button onclick="adminTab('kullanicilar')" id="atab-kullanicilar" class="btn btn-ghost" style="font-size:13px;">👥 Kullanıcılar</button>
@@ -1701,6 +1702,20 @@ window.addEventListener('load', async () => {
 
       <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:12px;color:var(--text);">Mevcut Haberler</div>
       <div id="haberler-listesi"></div>
+    </div>
+
+    <!-- FORUM -->
+    <div id="admin-forum" style="display:none;">
+      <div style="background:white;border:1px solid var(--border);border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:var(--shadow);">
+        <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:8px;color:var(--text);">Forum Yönetimi</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;">Buradan tüm forum konularını ve yapılmış yorumları yönetebilirsiniz.</div>
+      </div>
+
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:12px;color:var(--text);">Açılan Konular</div>
+      <div id="forum-admin-topics-list" style="margin-bottom:24px;"></div>
+
+      <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:12px;color:var(--text);">Yapılan Yorumlar</div>
+      <div id="forum-admin-comments-list"></div>
     </div>
 
     <!-- İŞ İLANLARI -->
@@ -1788,13 +1803,14 @@ window.addEventListener('load', async () => {
 // Admin sekme geçişi
 function adminTab(tab) {
   if (!ensureAdminAccess('Admin panelini kullanmak')) return;
-  ['haberler','ilanlar','etkinlikler','kullanicilar'].forEach(t => {
+  ['haberler','forum','ilanlar','etkinlikler','kullanicilar'].forEach(t => {
     document.getElementById('admin-' + t).style.display = t === tab ? 'block' : 'none';
     const btn = document.getElementById('atab-' + t);
     btn.className = t === tab ? 'btn btn-primary' : 'btn btn-ghost';
     btn.style.fontSize = '13px';
   });
   if (tab === 'haberler') loadHaberler();
+  if (tab === 'forum') loadForumYonetim();
   if (tab === 'ilanlar') loadIlanlar();
   if (tab === 'etkinlikler') loadEtkinlikler();
   if (tab === 'kullanicilar') loadKullanicilar();
@@ -1864,6 +1880,7 @@ async function forumKonuEkle() {
   loadForumPage();
   loadHomeForum();
   loadStats();
+  if (isAdmin()) loadForumYonetim();
 }
 
 // FORUM YORUM EKLE
@@ -1915,6 +1932,7 @@ async function forumYorumEkle(konuId) {
   }
   loadForumPage();
   loadHomeForum();
+  if (isAdmin()) loadForumYonetim();
 }
 
 async function forumKonuSil(konuId) {
@@ -1930,6 +1948,7 @@ async function forumKonuSil(konuId) {
   loadForumPage();
   loadHomeForum();
   loadStats();
+  if (isAdmin()) loadForumYonetim();
 }
 
 async function forumYorumSil(yorumId) {
@@ -1948,6 +1967,7 @@ async function forumYorumSil(yorumId) {
 
   loadForumPage();
   loadHomeForum();
+  if (isAdmin()) loadForumYonetim();
 }
 
 async function anketSil(anketId) {
@@ -2121,6 +2141,101 @@ async function etkinlikEkle() {
 }
 
 // LİSTELEME FONKSİYONLARI
+async function loadForumYonetim() {
+  const topicsEl = document.getElementById('forum-admin-topics-list');
+  const commentsEl = document.getElementById('forum-admin-comments-list');
+  if (!topicsEl || !commentsEl) return;
+
+  if (!isAdmin()) {
+    const lockedMessage = '<p style="color:var(--muted);font-size:13px;">Bu alan sadece admin kullanıcılar için görünür.</p>';
+    topicsEl.innerHTML = lockedMessage;
+    commentsEl.innerHTML = lockedMessage;
+    return;
+  }
+
+  topicsEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Konular yükleniyor...</p>';
+  commentsEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Yorumlar yükleniyor...</p>';
+
+  const { data: konular, error: konuError } = await _supa
+    .from('forum_konular')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (konuError) {
+    topicsEl.innerHTML = `<p style="color:#c0392b;font-size:13px;">Forum konuları yüklenemedi: ${escapeHtml(konuError.message || 'Bilinmeyen hata')}</p>`;
+  } else if (!konular || konular.length === 0) {
+    topicsEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Henüz forum konusu yok.</p>';
+  } else {
+    topicsEl.innerHTML = konular.map(konu => `
+      <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;gap:16px;align-items:flex-start;box-shadow:var(--shadow);">
+        <div style="min-width:0;flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+            <span style="font-weight:700;font-size:14px;color:var(--text);">${escapeHtml(konu.baslik || 'Başlıksız konu')}</span>
+            <span style="font-size:11px;padding:3px 8px;border-radius:999px;background:var(--accentlight);color:var(--accent);">${forumKategoriLabel(konu.kategori)}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">
+            ${escapeHtml(konu.yazar_adi || 'İsimsiz kullanıcı')} · ${timeAgo(konu.created_at)}
+          </div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;">
+            ${konu.icerik ? formatMultilineText(konu.icerik) : 'İçerik girilmemiş.'}
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted);">
+            <span>💬 ${konu.yorum_sayisi ?? 0} yorum</span>
+            <span>▲ ${konu.oy_sayisi ?? 0} oy</span>
+          </div>
+        </div>
+        <button onclick="forumKonuSil('${konu.id}')" style="background:rgba(220,50,50,0.1);color:#c0392b;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Konuyu Sil</button>
+      </div>
+    `).join('');
+  }
+
+  const konuBaslikMap = Object.fromEntries((konular || []).map(konu => [konu.id, konu.baslik || 'Başlıksız konu']));
+  const { data: yorumlar, error: yorumError } = await _supa
+    .from('forum_yorumlar')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (yorumError) {
+    if (yorumError.code === 'PGRST205' || /forum_yorumlar/i.test(yorumError.message || '')) {
+      showForumCommentSchemaWarning(yorumError.message);
+      commentsEl.innerHTML = `
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:var(--shadow);color:var(--muted);font-size:13px;line-height:1.7;">
+          Forum yorum altyapısı henüz kurulmamış görünüyor.<br>
+          Supabase SQL Editor içinde <code>supabase-forum-yorumlar-schema.sql</code> dosyasını çalıştırın.
+        </div>
+      `;
+      return;
+    }
+    commentsEl.innerHTML = `<p style="color:#c0392b;font-size:13px;">Forum yorumları yüklenemedi: ${escapeHtml(yorumError.message || 'Bilinmeyen hata')}</p>`;
+    return;
+  }
+
+  hideForumCommentSchemaWarning();
+
+  if (!yorumlar || yorumlar.length === 0) {
+    commentsEl.innerHTML = '<p style="color:var(--muted);font-size:13px;">Henüz yorum yapılmamış.</p>';
+    return;
+  }
+
+  commentsEl.innerHTML = yorumlar.map(yorum => `
+    <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;gap:16px;align-items:flex-start;box-shadow:var(--shadow);">
+      <div style="min-width:0;flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="font-weight:700;font-size:13px;color:var(--text);">${escapeHtml(yorum.yazar_adi || 'İsimsiz kullanıcı')}</span>
+          <span style="font-size:12px;color:var(--muted);">${timeAgo(yorum.created_at)}</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">
+          Konu: ${escapeHtml(konuBaslikMap[yorum.konu_id] || 'Silinmiş konu')}
+        </div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6;">
+          ${formatMultilineText(yorum.icerik || '')}
+        </div>
+      </div>
+      <button onclick="forumYorumSil('${yorum.id}')" style="background:rgba(220,50,50,0.1);color:#c0392b;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;">Yorumu Sil</button>
+    </div>
+  `).join('');
+}
+
 async function loadHaberler() {
   const el = document.getElementById('haberler-listesi');
   if (!el) return;
