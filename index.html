@@ -857,6 +857,141 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const _supa = supabase.createClient('https://biwykpghfzytsqnyzfwz.supabase.co', 'sb_publishable_8_KNNcbI-QtN5XSTXGEtuA_RNW8dpvX');
+let currentSessionUser = null;
+let currentUserProfile = null;
+
+const ACCESS_MODAL_DEFAULTS = {
+  icon: '🔒',
+  title: 'Sadece Mezunlara Açık',
+  message: 'Bu bölüme erişmek için mezun hesabı gereklidir. Mezun olduysanız hesabınızı güncelleyin.'
+};
+
+function safeRole(role) {
+  return ['ogrenci', 'mezun', 'akademisyen', 'admin'].includes(role) ? role : 'ogrenci';
+}
+
+function allowedRegistrationRole(role) {
+  return ['ogrenci', 'mezun', 'akademisyen'].includes(role) ? role : 'ogrenci';
+}
+
+function currentRole() {
+  return safeRole(currentUserProfile?.role || 'ogrenci');
+}
+
+function isAdmin() {
+  return currentRole() === 'admin';
+}
+
+function canAccessPage(page) {
+  if (page === 'admin') return isAdmin();
+  if (page === 'jobs') return currentRole() !== 'ogrenci';
+  if (page === 'members') return !['ogrenci', 'akademisyen'].includes(currentRole());
+  return true;
+}
+
+function setAccessModal(icon, title, message) {
+  const modal = document.getElementById('locked-modal');
+  if (!modal) return;
+  const iconEl = document.getElementById('access-modal-icon');
+  const titleEl = document.getElementById('access-modal-title');
+  const messageEl = document.getElementById('access-modal-message');
+  if (iconEl) iconEl.textContent = icon;
+  if (titleEl) titleEl.textContent = title;
+  if (messageEl) messageEl.textContent = message;
+  modal.style.display = 'flex';
+}
+
+function showLockedModal() {
+  setAccessModal(ACCESS_MODAL_DEFAULTS.icon, ACCESS_MODAL_DEFAULTS.title, ACCESS_MODAL_DEFAULTS.message);
+}
+
+function showAdminOnlyModal(actionText = 'Bu işlemi yapmak') {
+  setAccessModal('⚙️', 'Sadece Admin Yetkisi', `${actionText} için admin hesabı gereklidir.`);
+}
+
+function hideAccessModal() {
+  const modal = document.getElementById('locked-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function ensureAdminAccess(actionText = 'Bu işlemi yapmak') {
+  if (isAdmin()) return true;
+  showAdminOnlyModal(actionText);
+  return false;
+}
+
+function updateRoleRestrictions() {
+  const jobsLocked = currentRole() === 'ogrenci';
+  const membersLocked = ['ogrenci', 'akademisyen'].includes(currentRole());
+  document.querySelectorAll(`[onclick*="showPage('jobs')"]`).forEach(link => {
+    link.style.opacity = jobsLocked ? '0.4' : '';
+  });
+  document.querySelectorAll(`[onclick*="showPage('members')"]`).forEach(link => {
+    link.style.opacity = membersLocked ? '0.4' : '';
+  });
+}
+
+function updateAdminUi() {
+  const adminLink = document.getElementById('admin-nav-link');
+  if (adminLink) adminLink.style.display = isAdmin() ? 'list-item' : 'none';
+
+  ['news-admin-shortcut', 'jobs-admin-shortcut', 'events-admin-shortcut', 'poll-create-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = isAdmin() ? '' : 'none';
+  });
+
+  const adminPage = document.getElementById('page-admin');
+  if (adminPage && !isAdmin() && adminPage.classList.contains('active')) {
+    adminPage.classList.remove('active');
+    const homePage = document.getElementById('page-home');
+    if (homePage) homePage.classList.add('active');
+  }
+}
+
+function renderCurrentUser() {
+  if (!currentSessionUser || !currentUserProfile) return;
+
+  const role = currentRole();
+  const name = currentUserProfile.full_name || currentSessionUser.email || 'Kullanıcı';
+  const roleBadge = {
+    mezun:       { bg: 'rgba(26,180,100,0.2)', color: '#4dff9e', label: '🎓 Mezun' },
+    akademisyen: { bg: 'rgba(255,180,0,0.2)', color: '#ffd700', label: '👨‍🏫 Akademisyen' },
+    ogrenci:     { bg: 'rgba(26,100,200,0.2)', color: '#7ec8ff', label: '📚 Öğrenci' },
+    admin:       { bg: 'rgba(255,215,0,0.18)', color: '#ffd700', label: '⚙️ Admin' }
+  };
+  const badge = roleBadge[role] || roleBadge.ogrenci;
+
+  const navRight = document.querySelector('.nav-right');
+  if (navRight) {
+    navRight.innerHTML = `
+      <span style="color:rgba(255,255,255,0.7);font-size:13px;">👋 ${name}</span>
+      <span style="background:${badge.bg};color:${badge.color};font-size:11px;padding:3px 10px;border-radius:100px;font-weight:700;">${badge.label}</span>
+      <button class="btn btn-ghost" onclick="doLogout()" style="font-size:12px;">Çıkış</button>
+    `;
+  }
+
+  updateAdminUi();
+  updateRoleRestrictions();
+}
+
+async function fetchProfile(userId) {
+  const { data } = await _supa.from('profiles').select('id, role, full_name, graduation_year').eq('id', userId).single();
+  return data || null;
+}
+
+function setCurrentUserContext(user, profile) {
+  currentSessionUser = user || null;
+  currentUserProfile = user ? {
+    id: user.id,
+    role: safeRole(profile?.role),
+    full_name: profile?.full_name || user.email || 'Kullanıcı',
+    graduation_year: profile?.graduation_year || null
+  } : null;
+
+  if (currentSessionUser && currentUserProfile) {
+    renderCurrentUser();
+  }
+}
 
 function switchTab(tab) {
   const isLogin = tab === 'login';
@@ -895,13 +1030,8 @@ async function doLogin() {
     btn.textContent = 'Giriş Yap →';
     btn.disabled = false;
   } else {
-    // Kullanıcı rolünü çek
-    const { data: profile } = await _supa.from('profiles').select('role, full_name').eq('id', data.user.id).single();
-    const role = profile?.role || 'ogrenci';
-    const name = profile?.full_name || email;
-
-    // Menüyü role göre ayarla
-    applyRole(role, name);
+    const profile = await fetchProfile(data.user.id);
+    setCurrentUserContext(data.user, profile);
 
     document.getElementById('login-screen').style.opacity = '0';
     document.getElementById('login-screen').style.transition = 'opacity 0.5s';
@@ -913,7 +1043,7 @@ async function doRegister() {
   const fullname = document.getElementById('reg-fullname').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const pass = document.getElementById('reg-pass').value.trim();
-  const role = document.getElementById('reg-role').value;
+  const role = allowedRegistrationRole(document.getElementById('reg-role').value);
   const year = document.getElementById('reg-year').value.trim();
   const err = document.getElementById('register-error');
   const btn = document.querySelector('#form-register button');
@@ -952,48 +1082,6 @@ async function doRegister() {
   }
 }
 
-function applyRole(role, name) {
-  const roleBadge = {
-    mezun:       { bg: 'rgba(26,180,100,0.2)',  color: '#4dff9e',  label: '🎓 Mezun' },
-    akademisyen: { bg: 'rgba(255,180,0,0.2)',   color: '#ffd700',  label: '👨‍🏫 Akademisyen' },
-    ogrenci:     { bg: 'rgba(26,100,200,0.2)',  color: '#7ec8ff',  label: '📚 Öğrenci' },
-  };
-  const badge = roleBadge[role] || roleBadge.ogrenci;
-
-  // Kullanıcı adını navbara ekle
-  const navRight = document.querySelector('.nav-right');
-  navRight.innerHTML = `
-    <span style="color:rgba(255,255,255,0.7);font-size:13px;">👋 ${name}</span>
-    <span style="background:${badge.bg};color:${badge.color};font-size:11px;padding:3px 10px;border-radius:100px;font-weight:700;">${badge.label}</span>
-    <button class="btn btn-ghost" onclick="doLogout()" style="font-size:12px;">Çıkış</button>
-  `;
-
-  // Öğrenci → iş ilanları ve mezunlar kilitli
-  if (role === 'ogrenci') {
-    ['jobs', 'members'].forEach(page => {
-      const link = document.querySelector(`[onclick="showPage('${page}')"]`);
-      if (link) { link.style.opacity = '0.4'; link.onclick = () => showLockedModal(); }
-    });
-  }
-
-  // Admin → admin paneli linkini göster
-  if (role === 'admin') {
-    const adminLink = document.getElementById('admin-nav-link');
-    if (adminLink) adminLink.style.display = 'list-item';
-  }
-
-  // Akademisyen → sadece mezun dizini kilitli
-  if (role === 'akademisyen') {
-    const link = document.querySelector(`[onclick="showPage('members')"]`);
-    if (link) { link.style.opacity = '0.4'; link.onclick = () => showLockedModal(); }
-  }
-}
-
-function showLockedModal() {
-  const modal = document.getElementById('locked-modal');
-  if (modal) modal.style.display = 'flex';
-}
-
 async function doLogout() {
   await _supa.auth.signOut();
   location.reload();
@@ -1012,10 +1100,12 @@ document.addEventListener('keydown', function(e) {
 window.addEventListener('load', async () => {
   const { data } = await _supa.auth.getSession();
   if (data.session) {
-    const { data: profile } = await _supa.from('profiles').select('role, full_name').eq('id', data.session.user.id).single();
-    applyRole(profile?.role || 'ogrenci', profile?.full_name || data.session.user.email);
+    const profile = await fetchProfile(data.session.user.id);
+    setCurrentUserContext(data.session.user, profile);
     document.getElementById('login-screen').style.display = 'none';
   }
+  updateAdminUi();
+  updateRoleRestrictions();
 });
 </script>
 
@@ -1169,7 +1259,7 @@ window.addEventListener('load', async () => {
     <button class="pill">Haber</button>
     <button class="pill">Başarı</button>
     <button class="pill">Etkinlik</button>
-    <button class="btn btn-primary" style="margin-left:auto;" onclick="showPage('admin'); adminTab('haberler')">+ Haber Ekle</button>
+    <button id="news-admin-shortcut" class="btn btn-primary" style="margin-left:auto;display:none;" onclick="showPage('admin'); adminTab('haberler')">+ Haber Ekle</button>
   </div>
   <div class="news-grid">
     <div class="news-main" id="news-main-list">
@@ -1252,7 +1342,7 @@ window.addEventListener('load', async () => {
     <button class="pill">Kalite</button>
     <button class="pill">Savunma</button>
     <button class="pill">Yurt Dışı</button>
-    <button class="btn btn-primary" style="margin-left:auto;" onclick="showPage('admin'); adminTab('ilanlar')">+ İlan Ver</button>
+    <button id="jobs-admin-shortcut" class="btn btn-primary" style="margin-left:auto;display:none;" onclick="showPage('admin'); adminTab('ilanlar')">+ İlan Ver</button>
   </div>
   <div id="jobs-container" class="jobs-grid">
     <div class="empty-state" style="grid-column:1/-1;">
@@ -1294,7 +1384,7 @@ window.addEventListener('load', async () => {
     <button class="pill">Yüzyüze</button>
     <button class="pill">Kariyer</button>
     <button class="pill">Teknik</button>
-    <button class="btn btn-primary" style="margin-left:auto;" onclick="showPage('admin'); adminTab('etkinlikler')">+ Etkinlik Ekle</button>
+    <button id="events-admin-shortcut" class="btn btn-primary" style="margin-left:auto;display:none;" onclick="showPage('admin'); adminTab('etkinlikler')">+ Etkinlik Ekle</button>
   </div>
   <div id="events-container" class="events-list">
     <div class="empty-state">
@@ -1306,6 +1396,14 @@ window.addEventListener('load', async () => {
 
 <script>
   function showPage(page) {
+    if (!canAccessPage(page)) {
+      if (page === 'admin') {
+        showAdminOnlyModal('Bu bölüme erişmek');
+      } else {
+        showLockedModal();
+      }
+      return;
+    }
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
     document.getElementById('page-' + page).classList.add('active');
@@ -1380,6 +1478,7 @@ window.addEventListener('load', async () => {
   }
 
   function togglePollComposer(forceOpen) {
+    if (!ensureAdminAccess('Anket oluşturmak')) return;
     if (!pollSchemaReady) {
       showPollSchemaWarning();
       return;
@@ -1512,7 +1611,7 @@ window.addEventListener('load', async () => {
   <div class="filter-row" style="margin-top:24px;">
     <button class="pill active" onclick="setPollFilter('aktif', this)">Aktif</button>
     <button class="pill" onclick="setPollFilter('kapandi', this)">Kapandı</button>
-    <button class="btn btn-primary" style="margin-left:auto;" onclick="togglePollComposer()">+ Anket Oluştur</button>
+    <button id="poll-create-btn" class="btn btn-primary" style="margin-left:auto;display:none;" onclick="togglePollComposer()">+ Anket Oluştur</button>
   </div>
   <div style="max-width:720px;margin:0 auto;padding:0 32px 60px;">
     <div id="poll-schema-warning" class="poll-schema-warning" style="display:none;"></div>
@@ -1549,10 +1648,10 @@ window.addEventListener('load', async () => {
 <!-- KİLİTLİ MODAL -->
 <div id="locked-modal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;backdrop-filter:blur(4px);">
   <div style="background:white;border-radius:20px;padding:36px;max-width:380px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-    <div style="font-size:48px;margin-bottom:16px;">🔒</div>
-    <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#0d1f3c;margin-bottom:10px;">Sadece Mezunlara Açık</div>
-    <p style="color:#5a7a9a;font-size:14px;line-height:1.6;margin-bottom:24px;">Bu bölüme erişmek için mezun hesabı gereklidir. Mezun olduysanız hesabınızı güncelleyin.</p>
-    <button onclick="document.getElementById('locked-modal').style.display='none'" style="padding:10px 28px;border-radius:10px;border:none;background:#1a5faa;color:white;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;">Anladım</button>
+    <div id="access-modal-icon" style="font-size:48px;margin-bottom:16px;">🔒</div>
+    <div id="access-modal-title" style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:#0d1f3c;margin-bottom:10px;">Sadece Mezunlara Açık</div>
+    <p id="access-modal-message" style="color:#5a7a9a;font-size:14px;line-height:1.6;margin-bottom:24px;">Bu bölüme erişmek için mezun hesabı gereklidir. Mezun olduysanız hesabınızı güncelleyin.</p>
+    <button onclick="hideAccessModal()" style="padding:10px 28px;border-radius:10px;border:none;background:#1a5faa;color:white;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;">Anladım</button>
   </div>
 </div>
 
@@ -1688,6 +1787,7 @@ window.addEventListener('load', async () => {
 <script>
 // Admin sekme geçişi
 function adminTab(tab) {
+  if (!ensureAdminAccess('Admin panelini kullanmak')) return;
   ['haberler','ilanlar','etkinlikler','kullanicilar'].forEach(t => {
     document.getElementById('admin-' + t).style.display = t === tab ? 'block' : 'none';
     const btn = document.getElementById('atab-' + t);
@@ -1702,6 +1802,7 @@ function adminTab(tab) {
 
 // HABER EKLE
 async function haberEkle() {
+  if (!ensureAdminAccess('Haber eklemek')) return;
   const baslik = document.getElementById('h-baslik').value.trim();
   const icerik = document.getElementById('h-icerik').value.trim();
   const kategori = document.getElementById('h-kategori').value;
@@ -1816,8 +1917,59 @@ async function forumYorumEkle(konuId) {
   loadHomeForum();
 }
 
+async function forumKonuSil(konuId) {
+  if (!ensureAdminAccess('Forum konusunu silmek')) return;
+  if (!confirm('Bu forum konusunu silmek istediğinize emin misiniz?')) return;
+
+  const { error } = await _supa.from('forum_konular').delete().eq('id', konuId);
+  if (error) {
+    alert('Forum konusu silinirken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  loadForumPage();
+  loadHomeForum();
+  loadStats();
+}
+
+async function forumYorumSil(yorumId) {
+  if (!ensureAdminAccess('Forum yorumunu silmek')) return;
+  if (!confirm('Bu yorumu silmek istediğinize emin misiniz?')) return;
+
+  const { error } = await _supa.from('forum_yorumlar').delete().eq('id', yorumId);
+  if (error) {
+    if (error.code === 'PGRST205' || /forum_yorumlar/i.test(error.message || '')) {
+      showForumCommentSchemaWarning(error.message);
+      return;
+    }
+    alert('Yorum silinirken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  loadForumPage();
+  loadHomeForum();
+}
+
+async function anketSil(anketId) {
+  if (!ensureAdminAccess('Anketi silmek')) return;
+  if (!confirm('Bu anketi silmek istediğinize emin misiniz?')) return;
+
+  const { error } = await _supa.from('anketler').delete().eq('id', anketId);
+  if (error) {
+    if (error.code === 'PGRST205' || /anket/i.test(error.message || '')) {
+      showPollSchemaWarning(error.message);
+      return;
+    }
+    alert('Anket silinirken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  loadPollsPage();
+}
+
 // ANKET OLUŞTUR
 async function anketOlustur() {
+  if (!ensureAdminAccess('Anket oluşturmak')) return;
   if (!pollSchemaReady) {
     showPollSchemaWarning();
     return;
@@ -1926,6 +2078,7 @@ async function anketOyVer(anketId, secenekId) {
 
 // İLAN EKLE
 async function ilanEkle() {
+  if (!ensureAdminAccess('İlan eklemek')) return;
   const baslik = document.getElementById('i-baslik').value.trim();
   const sirket = document.getElementById('i-sirket').value.trim();
   const konum = document.getElementById('i-konum').value.trim();
@@ -1947,6 +2100,7 @@ async function ilanEkle() {
 
 // ETKİNLİK EKLE
 async function etkinlikEkle() {
+  if (!ensureAdminAccess('Etkinlik eklemek')) return;
   const baslik = document.getElementById('e-baslik').value.trim();
   const gun = document.getElementById('e-gun').value.trim();
   const ay = document.getElementById('e-ay').value.trim();
@@ -1968,8 +2122,13 @@ async function etkinlikEkle() {
 
 // LİSTELEME FONKSİYONLARI
 async function loadHaberler() {
-  const { data } = await _supa.from('haberler').select('*').order('created_at', { ascending: false });
   const el = document.getElementById('haberler-listesi');
+  if (!el) return;
+  if (!isAdmin()) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Bu alan sadece admin kullanıcılar için görünür.</p>';
+    return;
+  }
+  const { data } = await _supa.from('haberler').select('*').order('created_at', { ascending: false });
   if (!data || data.length === 0) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Henüz haber yok.</p>'; return; }
   el.innerHTML = data.map(h => `
     <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow);">
@@ -1984,8 +2143,13 @@ async function loadHaberler() {
 }
 
 async function loadIlanlar() {
-  const { data } = await _supa.from('is_ilanlari').select('*').order('created_at', { ascending: false });
   const el = document.getElementById('ilanlar-listesi');
+  if (!el) return;
+  if (!isAdmin()) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Bu alan sadece admin kullanıcılar için görünür.</p>';
+    return;
+  }
+  const { data } = await _supa.from('is_ilanlari').select('*').order('created_at', { ascending: false });
   if (!data || data.length === 0) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Henüz ilan yok.</p>'; return; }
   el.innerHTML = data.map(i => `
     <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow);">
@@ -2001,8 +2165,13 @@ async function loadIlanlar() {
 }
 
 async function loadEtkinlikler() {
-  const { data } = await _supa.from('etkinlikler').select('*').order('created_at', { ascending: false });
   const el = document.getElementById('etkinlikler-listesi');
+  if (!el) return;
+  if (!isAdmin()) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Bu alan sadece admin kullanıcılar için görünür.</p>';
+    return;
+  }
+  const { data } = await _supa.from('etkinlikler').select('*').order('created_at', { ascending: false });
   if (!data || data.length === 0) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Henüz etkinlik yok.</p>'; return; }
   el.innerHTML = data.map(e => `
     <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow);">
@@ -2018,8 +2187,13 @@ async function loadEtkinlikler() {
 }
 
 async function loadKullanicilar() {
-  const { data } = await _supa.from('profiles').select('*').order('role');
   const el = document.getElementById('kullanicilar-listesi');
+  if (!el) return;
+  if (!isAdmin()) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Bu alan sadece admin kullanıcılar için görünür.</p>';
+    return;
+  }
+  const { data } = await _supa.from('profiles').select('*').order('role');
   if (!data || data.length === 0) { el.innerHTML = '<p style="color:var(--muted);font-size:13px;">Henüz kullanıcı yok.</p>'; return; }
   el.innerHTML = data.map(u => `
     <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;box-shadow:var(--shadow);">
@@ -2045,12 +2219,39 @@ async function loadKullanicilar() {
 }
 
 async function rolDegistir(id, yeniRol) {
-  await _supa.from('profiles').update({ role: yeniRol }).eq('id', id);
+  if (!ensureAdminAccess('Kullanıcı rolünü değiştirmek')) return;
+  if (!confirm('Bu kullanıcının rolünü değiştirmek istediğinize emin misiniz?')) {
+    loadKullanicilar();
+    return;
+  }
+
+  const { error } = await _supa.from('profiles').update({ role: yeniRol }).eq('id', id);
+  if (error) {
+    alert('Rol değiştirilirken bir hata oluştu: ' + error.message);
+    loadKullanicilar();
+    return;
+  }
+
+  if (currentUserProfile?.id === id) {
+    currentUserProfile.role = yeniRol;
+    renderCurrentUser();
+    if (yeniRol !== 'admin') {
+      setAccessModal('⚙️', 'Admin Yetkisi Kaldırıldı', 'Bu oturum artık admin değil. Sayfa yenileniyor.');
+      setTimeout(() => location.reload(), 800);
+      return;
+    }
+  }
+  loadKullanicilar();
 }
 
 async function sil(tablo, id, reload) {
+  if (!ensureAdminAccess('İçerik silmek')) return;
   if (!confirm('Silmek istediğinize emin misiniz?')) return;
-  await _supa.from(tablo).delete().eq('id', id);
+  const { error } = await _supa.from(tablo).delete().eq('id', id);
+  if (error) {
+    alert('Silme işlemi sırasında bir hata oluştu: ' + error.message);
+    return;
+  }
   reload();
   if (tablo === 'haberler') {
     loadNewsPage();
@@ -2224,7 +2425,10 @@ async function loadForumPage() {
             <div class="forum-comment-item">
               <div class="forum-comment-meta">
                 <span class="forum-comment-author">${escapeHtml(yorum.yazar_adi || 'İsimsiz kullanıcı')}</span>
-                <span>${timeAgo(yorum.created_at)}</span>
+                <span style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <span>${timeAgo(yorum.created_at)}</span>
+                  ${isAdmin() ? `<button class="btn btn-ghost" type="button" style="padding:6px 10px;font-size:11px;" onclick="forumYorumSil('${yorum.id}')">Yorumu Sil</button>` : ''}
+                </span>
               </div>
               <div class="forum-comment-body">${formatMultilineText(yorum.icerik || '')}</div>
             </div>
@@ -2256,6 +2460,7 @@ async function loadForumPage() {
       </div>
       <div class="post-stats">
         <div class="post-replies">${k.yorum_sayisi ?? 0} yorum</div>
+        ${isAdmin() ? `<button class="btn btn-ghost" type="button" style="padding:6px 10px;font-size:11px;" onclick="forumKonuSil('${k.id}')">Konuyu Sil</button>` : ''}
       </div>
       <div class="forum-comments">
         <div class="forum-comments-title">Yorumlar</div>
@@ -2369,7 +2574,10 @@ async function loadPollsPage() {
             <div class="poll-title">${safeBaslik}</div>
             ${anket.aciklama ? `<div class="poll-description">${safeAciklama}</div>` : ''}
           </div>
-          <span class="${badgeClass}">${badgeLabel}</span>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            <span class="${badgeClass}">${badgeLabel}</span>
+            ${isAdmin() ? `<button class="btn btn-ghost" type="button" style="padding:8px 12px;font-size:11px;" onclick="anketSil('${anket.id}')">Anketi Sil</button>` : ''}
+          </div>
         </div>
         <div class="poll-meta">Oluşturan: ${safeOlusturan} · ${timeAgo(anket.created_at)}${bitisMetni}</div>
         <div class="poll-options">
