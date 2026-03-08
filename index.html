@@ -76,6 +76,71 @@
     font-size: 12px;
     margin-bottom: 12px;
   }
+  .forum-comments {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .forum-comments-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .forum-comments-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .forum-comment-item {
+    background: #f8fbff;
+    border: 1px solid #d9e7f6;
+    border-radius: 12px;
+    padding: 12px 14px;
+  }
+  .forum-comment-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .forum-comment-author {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .forum-comment-body {
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .forum-comment-empty {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .forum-comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .forum-comment-textarea {
+    min-height: 86px;
+    margin-bottom: 0;
+  }
+  .forum-comment-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
   .poll-compose {
     background: white;
     border: 1px solid var(--border);
@@ -480,7 +545,7 @@
     border-radius: 14px;
     padding: 18px 20px;
     margin-bottom: 10px;
-    cursor: pointer;
+    cursor: default;
     transition: all 0.2s;
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -488,7 +553,10 @@
     align-items: start;
     box-shadow: var(--shadow);
   }
-  .post-card:hover {
+  .post-card-clickable {
+    cursor: pointer;
+  }
+  .post-card-clickable:hover {
     border-color: rgba(192,57,43,0.35);
     box-shadow: var(--shadow-hover);
     transform: translateX(3px);
@@ -1162,6 +1230,7 @@ window.addEventListener('load', async () => {
         </div>
       </div>
     </div>
+    <div id="forum-comment-schema-warning" class="poll-schema-warning" style="display:none;"></div>
     <div class="divider-label">Son Konular</div>
     <div id="forum-posts-list">
       <div style="text-align:center;padding:40px;color:var(--muted);">Henüz konu açılmamış. İlk konuyu sen aç! 🚀</div>
@@ -1272,6 +1341,7 @@ window.addEventListener('load', async () => {
 
   let currentPollFilter = 'aktif';
   let pollSchemaReady = true;
+  let forumCommentsSchemaReady = true;
 
   function escapeHtml(value) {
     return String(value ?? '')
@@ -1280,6 +1350,10 @@ window.addEventListener('load', async () => {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
+  }
+
+  function formatMultilineText(value) {
+    return escapeHtml(value).replace(/\n/g, '<br>');
   }
 
   function pollOptionFieldHtml(index, value = '') {
@@ -1370,6 +1444,24 @@ window.addEventListener('load', async () => {
   function hidePollSchemaWarning() {
     pollSchemaReady = true;
     const warning = document.getElementById('poll-schema-warning');
+    if (warning) warning.style.display = 'none';
+  }
+
+  function showForumCommentSchemaWarning(errorMessage) {
+    forumCommentsSchemaReady = false;
+    const warning = document.getElementById('forum-comment-schema-warning');
+    if (!warning) return;
+    warning.style.display = 'block';
+    warning.innerHTML = `
+      <strong>Forum yorum altyapısı henüz kurulmamış.</strong><br>
+      Önce Supabase SQL Editor içinde <code>supabase-forum-yorumlar-schema.sql</code> dosyasını çalıştırın.
+      ${errorMessage ? `<br><span style="font-size:12px;">Detay: ${escapeHtml(errorMessage)}</span>` : ''}
+    `;
+  }
+
+  function hideForumCommentSchemaWarning() {
+    forumCommentsSchemaReady = true;
+    const warning = document.getElementById('forum-comment-schema-warning');
     if (warning) warning.style.display = 'none';
   }
 
@@ -1671,6 +1763,57 @@ async function forumKonuEkle() {
   loadForumPage();
   loadHomeForum();
   loadStats();
+}
+
+// FORUM YORUM EKLE
+async function forumYorumEkle(konuId) {
+  if (!forumCommentsSchemaReady) {
+    showForumCommentSchemaWarning();
+    return;
+  }
+
+  const textarea = document.getElementById(`forum-comment-${konuId}`);
+  const msg = document.getElementById(`forum-comment-msg-${konuId}`);
+  const icerik = textarea?.value.trim() || '';
+
+  if (!icerik) {
+    alert('Yorum içeriği zorunlu!');
+    return;
+  }
+
+  const { data: sessionData } = await _supa.auth.getSession();
+  const user = sessionData?.session?.user;
+  if (!user) {
+    alert('Yorum yapmak için giriş yapmalısınız.');
+    return;
+  }
+
+  const { data: profile } = await _supa.from('profiles').select('full_name').eq('id', user.id).single();
+  const yazarAdi = profile?.full_name || user.email || 'İsimsiz kullanıcı';
+
+  const { error } = await _supa.from('forum_yorumlar').insert({
+    konu_id: konuId,
+    icerik,
+    yazar_id: user.id,
+    yazar_adi: yazarAdi
+  });
+
+  if (error) {
+    if (error.code === 'PGRST205' || /forum_yorumlar/i.test(error.message || '')) {
+      showForumCommentSchemaWarning(error.message);
+      return;
+    }
+    alert('Yorum eklenirken bir hata oluştu: ' + error.message);
+    return;
+  }
+
+  textarea.value = '';
+  if (msg) {
+    msg.style.display = 'inline';
+    setTimeout(() => msg.style.display = 'none', 2000);
+  }
+  loadForumPage();
+  loadHomeForum();
 }
 
 // ANKET OLUŞTUR
@@ -2035,15 +2178,68 @@ function forumKategoriLabel(kategori) {
 
 // FORUM SAYFASI
 async function loadForumPage() {
-  const { data } = await _supa.from('forum_konular').select('*').order('created_at', { ascending: false });
+  const { data, error: konuError } = await _supa.from('forum_konular').select('*').order('created_at', { ascending: false });
   const el = document.getElementById('forum-posts-list');
   if (!el) return;
+  if (konuError) {
+    el.innerHTML = '<div class="empty-state" style="text-align:center;"><h3>Forum yüklenemedi</h3><p>Konular alınırken bir hata oluştu.</p></div>';
+    return;
+  }
+
+  let yorumlarByKonu = {};
+  const { data: yorumlar, error: yorumError } = await _supa
+    .from('forum_yorumlar')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (yorumError) {
+    if (yorumError.code === 'PGRST205' || /forum_yorumlar/i.test(yorumError.message || '')) {
+      showForumCommentSchemaWarning(yorumError.message);
+    }
+  } else {
+    hideForumCommentSchemaWarning();
+    yorumlarByKonu = (yorumlar || []).reduce((acc, yorum) => {
+      const key = yorum.konu_id;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(yorum);
+      return acc;
+    }, {});
+  }
+
   if (!data || data.length === 0) {
     el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);">Henüz konu açılmamış. İlk konuyu sen aç! 🚀</div>';
     return;
   }
 
-  el.innerHTML = data.map(k => `
+  el.innerHTML = data.map(k => {
+    const safeBaslik = escapeHtml(k.baslik || 'Başlıksız konu');
+    const safeYazar = escapeHtml(k.yazar_adi || 'İsimsiz kullanıcı');
+    const safeIcerik = k.icerik ? formatMultilineText(k.icerik) : '';
+    const konuYorumlari = yorumlarByKonu[k.id] || [];
+    const yorumlarHtml = !forumCommentsSchemaReady
+      ? '<div class="forum-comment-empty">Yorum özelliği için Supabase şemasının kurulması gerekiyor.</div>'
+      : konuYorumlari.length === 0
+        ? '<div class="forum-comment-empty">Henüz yorum yok. İlk yorumu sen yaz.</div>'
+        : konuYorumlari.map(yorum => `
+            <div class="forum-comment-item">
+              <div class="forum-comment-meta">
+                <span class="forum-comment-author">${escapeHtml(yorum.yazar_adi || 'İsimsiz kullanıcı')}</span>
+                <span>${timeAgo(yorum.created_at)}</span>
+              </div>
+              <div class="forum-comment-body">${formatMultilineText(yorum.icerik || '')}</div>
+            </div>
+          `).join('');
+    const yorumFormu = forumCommentsSchemaReady ? `
+      <div class="forum-comment-form">
+        <textarea id="forum-comment-${k.id}" class="forum-textarea forum-comment-textarea" placeholder="Bu konuya yorum yaz..."></textarea>
+        <div class="forum-comment-actions">
+          <span id="forum-comment-msg-${k.id}" class="forum-note" style="display:none;color:var(--green);">Yorum başarıyla eklendi.</span>
+          <button class="btn btn-primary" type="button" onclick="forumYorumEkle('${k.id}')">Yorum Yap</button>
+        </div>
+      </div>
+    ` : '';
+
+    return `
     <div class="post-card">
       <div class="vote-col">
         <button class="vote-btn" type="button">▲</button>
@@ -2051,18 +2247,24 @@ async function loadForumPage() {
         <button class="vote-btn" type="button">▼</button>
       </div>
       <div>
-        <div class="post-title">${k.baslik || 'Başlıksız konu'}</div>
+        <div class="post-title">${safeBaslik}</div>
         <div class="post-meta">
           <span class="post-tag ${forumTagClass(k.kategori)}">${forumKategoriLabel(k.kategori)}</span>
-          <span class="post-author">${k.yazar_adi || 'İsimsiz kullanıcı'} · ${timeAgo(k.created_at)}</span>
+          <span class="post-author">${safeYazar} · ${timeAgo(k.created_at)}</span>
         </div>
-        ${k.icerik ? `<div style="margin-top:10px;color:var(--muted);font-size:13px;line-height:1.7;">${k.icerik}</div>` : ''}
+        ${k.icerik ? `<div style="margin-top:10px;color:var(--muted);font-size:13px;line-height:1.7;">${safeIcerik}</div>` : ''}
       </div>
       <div class="post-stats">
         <div class="post-replies">${k.yorum_sayisi ?? 0} yorum</div>
       </div>
+      <div class="forum-comments">
+        <div class="forum-comments-title">Yorumlar</div>
+        <div class="forum-comments-list">${yorumlarHtml}</div>
+        ${yorumFormu}
+      </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 // ANA SAYFA FORUM ÖNİZLEME
@@ -2076,15 +2278,15 @@ async function loadHomeForum() {
   }
 
   el.innerHTML = data.map(k => `
-    <div class="post-card" onclick="showPage('forum')">
+    <div class="post-card post-card-clickable" onclick="showPage('forum')">
       <div class="vote-col">
         <div class="vote-count">${k.oy_sayisi ?? 0}</div>
       </div>
       <div>
-        <div class="post-title">${k.baslik || 'Başlıksız konu'}</div>
+        <div class="post-title">${escapeHtml(k.baslik || 'Başlıksız konu')}</div>
         <div class="post-meta">
           <span class="post-tag ${forumTagClass(k.kategori)}">${forumKategoriLabel(k.kategori)}</span>
-          <span class="post-author">${k.yazar_adi || 'İsimsiz kullanıcı'} · ${timeAgo(k.created_at)}</span>
+          <span class="post-author">${escapeHtml(k.yazar_adi || 'İsimsiz kullanıcı')} · ${timeAgo(k.created_at)}</span>
         </div>
       </div>
       <div class="post-stats">
